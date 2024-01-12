@@ -28,8 +28,8 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v2
         with:
-            aws-access-key-id: "AKIA2NYRDK7RFWFHATTH"
-            aws-secret-access-key: "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"
+            aws-access-key-id: "AKIA2NYRDK7RNUHAV7OK"
+            aws-secret-access-key: "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"
             aws-region: ${{ env.AWS_REGION }}
             
     #   - name: Get commit ID
