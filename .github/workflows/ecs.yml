@@ -7,7 +7,7 @@ on:
 env:
   AWS_REGION: "us-east-1"
   ECR_REPOSITORY: test-ph
-  ECS_SERVICE: test-my
+  ECS_SERVICE: test
   ECS_CLUSTER: test
   CONTAINER_NAME: test
   TASK_DEFINITION: my-test  
