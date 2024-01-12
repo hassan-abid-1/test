@@ -10,7 +10,7 @@ env:
   ECS_SERVICE: test-my
   ECS_CLUSTER: test
   CONTAINER_NAME: test
-  TASK_DEFINITION: ./.aws/task-definition-prd.json  
+  TASK_DEFINITION: my-test  
 
 
 permissions:
