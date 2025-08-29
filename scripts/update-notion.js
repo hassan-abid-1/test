@@ -38,37 +38,29 @@ async function main() {
 
 async function handlePullRequestEvent(notion, payload) {
     const { action, pull_request } = payload;
-    const prNumber = pull_request.number;
     const branchName = pull_request.head.ref;
-    const prTitle = pull_request.title;
 
-    console.log(`🔍 PR #${prNumber} from branch: ${branchName}`);
-    console.log(`📝 PR Title: ${prTitle}`);
+    console.log(`🔍 PR from branch: ${branchName}`);
     console.log(`🎯 Action: ${action}`);
 
     const taskId = extractTaskIdFromBranch(branchName);
+
+    if (!taskId) {
+        console.log(`❌ No Task ID found in branch: ${branchName}`);
+        console.log('💡 Name branch like: feature/task-123');
+        return;
+    }
+
     console.log(`🎫 Extracted Task ID: ${taskId}`);
 
-    let page = null;
-    if (taskId) {
-        page = await notion.findPageByTaskId(taskId);
-    }
+    const page = await notion.findPageByTaskId(taskId);
 
     if (!page) {
-        const cleanTitle = cleanPRTitle(prTitle);
-        page = await notion.findPageByTitle(cleanTitle);
-    }
-
-    if (!page) {
-        console.log(`❌ No Notion page found for PR #${prNumber}`);
-        console.log('💡 To auto-link, do one of:');
-        console.log('   1. Name branch like: feature/task-123');
-        console.log('   2. Make PR title match Notion ticket title');
+        console.log(`❌ No Notion page found with Task ID: ${taskId}`);
         return;
     }
 
     console.log(`✅ Found Notion page: ${page.id}`);
-    console.log(`📋 Page Title: ${page.properties.Title?.title[0]?.text?.content}`);
 
     // Update status based on PR action
     switch (action) {
@@ -118,14 +110,6 @@ function extractTaskIdFromBranch(branchName) {
         }
     }
     return null;
-}
-
-function cleanPRTitle(prTitle) {
-    return prTitle
-        .replace(/^\[.*?\]\s*/, '')
-        .replace(/\s*\(.*?\)$/, '')
-        .replace(/\s*#\d+$/, '')
-        .trim();
 }
 
 // Run the script

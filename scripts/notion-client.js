@@ -29,29 +29,6 @@ class NotionClient {
         }
     }
 
-    async findPageByTitle(title) {
-        try {
-            console.log(`Searching for Notion page with title: "${title}"`);
-
-            const response = await this.notion.databases.query({
-                database_id: this.databaseId,
-                filter: {
-                    property: "Title",
-                    title: {
-                        equals: title
-                    }
-                }
-            });
-
-            console.log(`Found ${response.results.length} pages with title: "${title}"`);
-            return response.results[0];
-
-        } catch (error) {
-            console.error('Error finding page by title:', error);
-            return null;
-        }
-    }
-
     async updatePageStatus(pageId, status) {
         try {
             await this.notion.pages.update({
