@@ -1,0 +1,36 @@
+name: Sync Notion Status with GitHub
+
+on:
+  pull_request:
+    types: [opened, review_requested, closed]
+  push:
+    branches: [dev, development, uat, production]
+
+jobs:
+  update-notion:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run Notion sync
+        env:
+          NOTION_API_KEY: ${{ secrets.NOTION_API_KEY }}
+          NOTION_DATABASE_ID: ${{ secrets.NOTION_DATABASE_ID }}
+          GITHUB_EVENT_PATH: ${{ github.event_path }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+        run: node scripts/update-notion.js
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "Notion sync failed. Check the logs for details."
+          exit 1
