@@ -47,7 +47,7 @@ async function handlePullRequestEvent(notion, payload) {
 
     if (!taskId) {
         console.log(`❌ No Task ID found in branch: ${branchName}`);
-        console.log('💡 Name branch like: feature/task-123');
+        console.log('💡 Name branch like: feature/task-123 (must end with numbers)');
         return;
     }
 
@@ -98,15 +98,17 @@ async function handlePushEvent(notion, payload) {
 }
 
 function extractTaskIdFromBranch(branchName) {
+    // Pattern: prefix/letters-numbers (must end with numbers)
+    // Examples: TES-76S-2 → ends with number "2"
     const patterns = [
-        /^(feature|fix|hotfix|bugfix|chore|docs|style|refactor|test|release)\/([a-zA-Z_-]*\d+)$/i,
-        /^(feature|fix|hotfix|bugfix|chore|docs|style|refactor|test|release)\/([a-zA-Z_-]*\d+)-([a-z0-9]+)$/i
+        /^(feature|fix|hotfix|bugfix|chore|docs|style|refactor|test|release)\/(.+-\d+)$/i,  // letters-hyphen-numbers
+        /^(feature|fix|hotfix|bugfix|chore|docs|style|refactor|test|release)\/(.+\d+)$/i     // letters-numbers (no hyphen)
     ];
 
     for (const pattern of patterns) {
         const match = branchName.match(pattern);
         if (match) {
-            return match[2];
+            return match[2]; // Return the task ID part
         }
     }
     return null;
