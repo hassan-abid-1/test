@@ -4,7 +4,7 @@ on:
   pull_request:
     types: [opened, review_requested, closed]
   push:
-    branches: [main, uat, production]
+    branches: [dev, development, uat, production]
 
 jobs:
   update-notion:

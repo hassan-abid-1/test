@@ -43,11 +43,27 @@ async function main() {
 async function handlePullRequestEvent(notion, payload) {
     const { action, pull_request } = payload;
     const branchName = pull_request.head.ref;
+    const targetBranch = pull_request.base.ref;
 
-    console.log(`🔍 PR from branch: ${branchName}`);
+    console.log(`🔍 PR from branch: ${branchName} → ${targetBranch}`);
     console.log(`🎯 Action: ${action}`);
 
-    // Try different task ID extraction methods
+    // Skip status updates for deployment PRs (any branch→uat, any branch→production)
+    const deploymentBranches = ['uat', 'production'];
+    if (deploymentBranches.includes(targetBranch)) {
+        console.log(`⏭️  Skipping status update - this is a deployment PR to ${targetBranch}`);
+        console.log(`💡 Deployment PRs don't change individual story statuses`);
+        return;
+    }
+
+    // Only process PRs targeting dev or development branches
+    const developmentBranches = ['dev', 'development'];
+    if (!developmentBranches.includes(targetBranch)) {
+        console.log(`⏭️  Skipping status update - target branch ${targetBranch} is not a development branch`);
+        return;
+    }
+
+    // Extract numeric task ID from branch name
     const numericTaskId = extractTaskIdNumberFromBranch(branchName);
 
     console.log(`🔢 Numeric Task ID from branch: ${numericTaskId}`);
@@ -67,21 +83,29 @@ async function handlePullRequestEvent(notion, payload) {
 
     console.log(`✅ Found Notion page: ${page.id}`);
 
-    // Update status based on PR action
+    // Update status based on PR action (only for feature PRs to dev/development)
     switch (action) {
         case 'opened':
+            console.log(`📝 Feature PR opened to ${targetBranch} - moving to "In Progress"`);
             await notion.updatePageStatus(page.id, 'In Progress');
             break;
 
         case 'review_requested':
+            console.log(`👀 Code reviewer assigned - moving to "In Code Review"`);
             await notion.updatePageStatus(page.id, 'In Code Review');
             break;
 
         case 'closed':
             if (pull_request.merged) {
+                console.log(`🎉 PR merged to ${targetBranch} - moving to "In Dev"`);
                 await notion.updatePageStatus(page.id, 'In Dev');
+            } else {
+                console.log(`❌ PR closed without merge - no status change`);
             }
             break;
+
+        default:
+            console.log(`⚠️ Unhandled PR action: ${action}`);
     }
 }
 
@@ -92,13 +116,31 @@ async function handlePushEvent(notion, payload) {
     console.log(`🚀 Push detected to branch: ${branch}`);
 
     if (branch === 'uat') {
+        console.log(`🔄 Deployment merged to UAT - moving stories from "Ready for UAT", "In Dev", "Failed in Dev" to "In UAT"`);
         const statusesToMove = ['Ready for UAT', 'In Dev', 'Failed in Dev'];
         const pages = await notion.findPagesByStatus(statusesToMove);
-        await notion.updateMultiplePagesStatus(pages, 'In UAT');
+
+        if (pages.length > 0) {
+            await notion.updateMultiplePagesStatus(pages, 'In UAT');
+        } else {
+            console.log(`ℹ️ No pages found with statuses: ${statusesToMove.join(', ')}`);
+        }
 
     } else if (branch === 'production') {
+        console.log(`🔄 Deployment merged to Production - moving stories from "Passed UAT" to "Live in Prod"`);
         const pages = await notion.findPagesByStatus(['Passed UAT']);
-        await notion.updateMultiplePagesStatus(pages, 'Live in Prod');
+
+        if (pages.length > 0) {
+            await notion.updateMultiplePagesStatus(pages, 'Live in Prod');
+        } else {
+            console.log(`ℹ️ No pages found with status: Passed UAT`);
+        }
+
+    } else if (branch === 'dev' || branch === 'development') {
+        console.log(`ℹ️ Push to ${branch} branch - no bulk status changes (individual feature PRs handle story status)`);
+
+    } else {
+        console.log(`ℹ️ Push to ${branch} - no status changes configured for this branch`);
     }
 }
 
