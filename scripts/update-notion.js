@@ -43,20 +43,20 @@ async function handlePullRequestEvent(notion, payload) {
     console.log(`🔍 PR from branch: ${branchName}`);
     console.log(`🎯 Action: ${action}`);
 
-    const taskId = extractTaskIdFromBranch(branchName);
+    const taskIdNumber = extractTaskIdNumberFromBranch(branchName);
 
-    if (!taskId) {
-        console.log(`❌ No Task ID found in branch: ${branchName}`);
-        console.log('💡 Name branch like: feature/task-123 (must end with numbers)');
+    if (!taskIdNumber) {
+        console.log(`❌ No numeric Task ID found in branch: ${branchName}`);
+        console.log('💡 Name branch like: feature/123 or feature/TEST-456');
         return;
     }
 
-    console.log(`🎫 Extracted Task ID: ${taskId}`);
+    console.log(`🎫 Extracted numeric Task ID: ${taskIdNumber}`);
 
-    const page = await notion.findPageByTaskId(taskId);
+    const page = await notion.findPageByTaskId(taskIdNumber);
 
     if (!page) {
-        console.log(`❌ No Notion page found with Task ID: ${taskId}`);
+        console.log(`❌ No Notion page found with Task ID: ${taskIdNumber}`);
         return;
     }
 
@@ -97,18 +97,21 @@ async function handlePushEvent(notion, payload) {
     }
 }
 
-function extractTaskIdFromBranch(branchName) {
-    // Pattern: prefix/letters-numbers (must end with numbers)
-    // Examples: TES-76S-2 → ends with number "2"
+function extractTaskIdNumberFromBranch(branchName) {
+    // Extract only the numeric part from the branch name
+    // feature/TES-76S-2 → extracts "2" (last number)
+    // feature/GEN-5694 → extracts "5694"
+    // feature/123 → extracts "123"
+
     const patterns = [
-        /^(feature|fix|hotfix|bugfix|chore|docs|style|refactor|test|release)\/(.+-\d+)$/i,  // letters-hyphen-numbers
-        /^(feature|fix|hotfix|bugfix|chore|docs|style|refactor|test|release)\/(.+\d+)$/i     // letters-numbers (no hyphen)
+        /^(feature|fix|hotfix|bugfix|chore|docs|style|refactor|test|release)\/(?:.*-)?(\d+)$/i,
+        /^(feature|fix|hotfix|bugfix|chore|docs|style|refactor|test|release)\/(?:.*)?(\d+)/i
     ];
 
     for (const pattern of patterns) {
         const match = branchName.match(pattern);
-        if (match) {
-            return match[2]; // Return the task ID part
+        if (match && match[2]) {
+            return parseInt(match[2]);
         }
     }
     return null;

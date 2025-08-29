@@ -6,21 +6,21 @@ class NotionClient {
         this.databaseId = databaseId;
     }
 
-    async findPageByTaskId(taskId) {
+    async findPageByTaskId(taskIdNumber) {
         try {
-            console.log(`Searching for Notion page with Task ID: ${taskId}`);
+            console.log(`Searching for Notion page with Task ID: ${taskIdNumber}`);
 
             const response = await this.notion.databases.query({
                 database_id: this.databaseId,
                 filter: {
                     property: "Task ID",
-                    rich_text: {
-                        equals: taskId
+                    number: {
+                        equals: taskIdNumber
                     }
                 }
             });
 
-            console.log(`Found ${response.results.length} pages for Task ID: ${taskId}`);
+            console.log(`Found ${response.results.length} pages for Task ID: ${taskIdNumber}`);
             return response.results[0];
 
         } catch (error) {
