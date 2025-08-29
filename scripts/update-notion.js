@@ -47,39 +47,21 @@ async function handlePullRequestEvent(notion, payload) {
     console.log(`🔍 PR from branch: ${branchName}`);
     console.log(`🎯 Action: ${action}`);
 
-    // Try both full branch-based task ID and numeric extraction
-    const taskIdFromBranch = extractTaskIdFromBranch(branchName);
+    // Try different task ID extraction methods
     const numericTaskId = extractTaskIdNumberFromBranch(branchName);
 
-    console.log(`🎫 Full Task ID from branch: ${taskIdFromBranch}`);
     console.log(`🔢 Numeric Task ID from branch: ${numericTaskId}`);
 
-    // Try to find page with different task ID formats
-    let page = null;
-
-    // First try with full task ID (e.g., "TES-76S-2")
-    if (taskIdFromBranch) {
-        page = await notion.findPageByTaskId(taskIdFromBranch);
+    if (!numericTaskId) {
+        console.log(`❌ No numeric Task ID found in branch: ${branchName}`);
+        console.log(`💡 Name branch like: feature/123 or feature/TEST-456`);
+        return;
     }
 
-    // If not found, try with numeric ID (e.g., 2)
-    if (!page && numericTaskId) {
-        console.log(`⚡ Trying with numeric Task ID: ${numericTaskId}`);
-        page = await notion.findPageByTaskId(numericTaskId);
-    }
-
-    // If still not found, try with the last part after dash (e.g., "2" from "TES-76S-2")
-    if (!page && taskIdFromBranch && taskIdFromBranch.includes('-')) {
-        const lastPart = taskIdFromBranch.split('-').pop();
-        if (lastPart && /^\d+$/.test(lastPart)) {
-            console.log(`⚡ Trying with last numeric part: ${lastPart}`);
-            page = await notion.findPageByTaskId(parseInt(lastPart));
-        }
-    }
+    const page = await notion.findPageByTaskId(numericTaskId);
 
     if (!page) {
-        console.log(`❌ No Notion page found with any Task ID format from branch: ${branchName}`);
-        console.log(`💡 Tried: ${taskIdFromBranch}, ${numericTaskId}`);
+        console.log(`❌ No Notion page found with Task ID: ${numericTaskId}`);
         return;
     }
 
@@ -120,36 +102,10 @@ async function handlePushEvent(notion, payload) {
     }
 }
 
-function extractTaskIdFromBranch(branchName) {
-    // Extract the full task ID from branch name
-    // feature/TES-76S-2 → "TES-76S-2"
-    // feature/GEN-5694 → "GEN-5694"
-    // feature/123 → "123"
-
-    const patterns = [
-        // Match feature/TASK-ID-NUMBER or similar
-        /^(?:feature|fix|hotfix|bugfix|chore|docs|style|refactor|test|release)\/([A-Z]+-[A-Z0-9]+-\d+)$/i,
-        // Match feature/TASK-NUMBER
-        /^(?:feature|fix|hotfix|bugfix|chore|docs|style|refactor|test|release)\/([A-Z]+-\d+)$/i,
-        // Match feature/NUMBER
-        /^(?:feature|fix|hotfix|bugfix|chore|docs|style|refactor|test|release)\/(\d+)$/i,
-        // Match anything after the prefix
-        /^(?:feature|fix|hotfix|bugfix|chore|docs|style|refactor|test|release)\/(.+)$/i
-    ];
-
-    for (const pattern of patterns) {
-        const match = branchName.match(pattern);
-        if (match && match[1]) {
-            return match[1];
-        }
-    }
-    return null;
-}
-
 function extractTaskIdNumberFromBranch(branchName) {
     // Extract only the numeric part from the branch name
     // feature/TES-76S-2 → extracts "2" (last number)
-    // feature/GEN-5694 → extracts "5694"
+    // feature/GEN-5694 → extracts "5694"  
     // feature/123 → extracts "123"
 
     const patterns = [

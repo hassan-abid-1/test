@@ -22,76 +22,36 @@ class NotionClient {
             let taskIdProperty = null;
             let propertyName = null;
 
-            // Check for common task ID property names
-            const possibleNames = ['Task ID', 'task_id', 'taskid', 'auto_increment_id', 'ID', 'id'];
-
-            for (const name of possibleNames) {
-                if (database.properties[name]) {
-                    taskIdProperty = database.properties[name];
-                    propertyName = name;
-                    break;
-                }
+            // Check for Task ID property (unique_id type for numeric matching)
+            if (database.properties['Task ID']) {
+                taskIdProperty = database.properties['Task ID'];
+                propertyName = 'Task ID';
+                console.log(`🎯 Using Task ID property (type: ${taskIdProperty.type})`);
             }
 
             if (!taskIdProperty) {
-                console.error('No Task ID property found. Available properties:', Object.keys(database.properties));
+                console.error('No Task ID property found in database');
                 return null;
             }
 
-            console.log(`Using property: ${propertyName} of type: ${taskIdProperty.type}`);
-
-            // Build the filter based on property type
-            let filter;
-
-            switch (taskIdProperty.type) {
-                case 'number':
-                    // If it's a number, convert taskId to number
-                    const numericTaskId = typeof taskId === 'string' ? parseInt(taskId) : taskId;
-                    if (isNaN(numericTaskId)) {
-                        console.error(`Cannot convert task ID "${taskId}" to number for numeric property`);
-                        return null;
-                    }
-                    filter = {
-                        property: propertyName,
-                        number: {
-                            equals: numericTaskId
-                        }
-                    };
-                    break;
-
-                case 'rich_text':
-                case 'title':
-                    filter = {
-                        property: propertyName,
-                        rich_text: {
-                            equals: taskId.toString()
-                        }
-                    };
-                    break;
-
-                case 'select':
-                    filter = {
-                        property: propertyName,
-                        select: {
-                            equals: taskId.toString()
-                        }
-                    };
-                    break;
-
-                case 'unique_id':
-                    // For unique_id properties, we need to use a different approach
-                    filter = {
-                        property: propertyName,
-                        unique_id: {
-                            equals: parseInt(taskId) || taskId
-                        }
-                    };
-                    break;
-
-                default:
-                    console.error(`Unsupported property type: ${taskIdProperty.type}`);
-                    return null;
+            // Build filter for unique_id type (numeric only)
+            if (taskIdProperty.type !== 'unique_id') {
+                console.error(`Expected Task ID to be unique_id type, got: ${taskIdProperty.type}`);
+                return null;
             }
+
+            const numericId = typeof taskId === 'string' ? parseInt(taskId) : taskId;
+            if (isNaN(numericId)) {
+                console.log(`⚠️  Cannot search Task ID with non-numeric value: ${taskId}`);
+                return null;
+            }
+
+            const filter = {
+                property: propertyName,
+                unique_id: {
+                    equals: numericId
+                }
+            };
 
             const response = await this.notion.databases.query({
                 database_id: this.databaseId,
