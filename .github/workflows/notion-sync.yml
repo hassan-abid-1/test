@@ -17,11 +17,9 @@ jobs:
         uses: actions/setup-node@v3
         with:
           node-version: '18'
-          # REMOVE the cache line to avoid lock file requirement
-          # cache: 'npm'
 
       - name: Install dependencies
-        run: npm install  # Changed from npm ci
+        run: npm install
 
       - name: Run Notion sync
         env:

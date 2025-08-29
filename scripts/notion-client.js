@@ -6,49 +6,66 @@ class NotionClient {
         this.databaseId = databaseId;
     }
 
-    async findPageByBranchName(branchName) {
+    async findPageByTaskId(taskId) {
         try {
-            console.log(`Searching for Notion page with branch: ${branchName}`);
+            console.log(`Searching for Notion page with Task ID: ${taskId}`);
 
             const response = await this.notion.databases.query({
                 database_id: this.databaseId,
                 filter: {
-                    property: "Branch Name",
+                    property: "Task ID",
                     rich_text: {
-                        equals: branchName
+                        equals: taskId
                     }
                 }
             });
 
-            console.log(`Found ${response.results.length} pages for branch: ${branchName}`);
+            console.log(`Found ${response.results.length} pages for Task ID: ${taskId}`);
             return response.results[0];
 
         } catch (error) {
-            console.error('Error finding page by branch name:', error);
+            console.error('Error finding page by Task ID:', error);
             return null;
         }
     }
 
-    async findPageByTicketId(ticketId) {
+    async findPageByTitle(title) {
         try {
-            console.log(`Searching for Notion page with ticket ID: ${ticketId}`);
+            console.log(`Searching for Notion page with title: "${title}"`);
 
             const response = await this.notion.databases.query({
                 database_id: this.databaseId,
                 filter: {
-                    property: "Ticket ID",
-                    rich_text: {
-                        equals: ticketId
+                    property: "Title",
+                    title: {
+                        equals: title
                     }
                 }
             });
 
-            console.log(`Found ${response.results.length} pages for ticket: ${ticketId}`);
+            console.log(`Found ${response.results.length} pages with title: "${title}"`);
             return response.results[0];
 
         } catch (error) {
-            console.error('Error finding page by ticket ID:', error);
+            console.error('Error finding page by title:', error);
             return null;
+        }
+    }
+
+    async updatePageStatus(pageId, status) {
+        try {
+            await this.notion.pages.update({
+                page_id: pageId,
+                properties: {
+                    "Status": {
+                        select: { name: status }
+                    }
+                }
+            });
+            console.log(`✅ Updated page ${pageId} to: ${status}`);
+        } catch (error) {
+            console.error('❌ Error updating page status:', error);
+            throw error;
         }
     }
 
@@ -74,23 +91,6 @@ class NotionClient {
         } catch (error) {
             console.error('Error finding pages by status:', error);
             return [];
-        }
-    }
-
-    async updatePageStatus(pageId, status) {
-        try {
-            await this.notion.pages.update({
-                page_id: pageId,
-                properties: {
-                    "Status": {
-                        select: { name: status }
-                    }
-                }
-            });
-            console.log(`✅ Updated page ${pageId} to: ${status}`);
-        } catch (error) {
-            console.error('❌ Error updating page status:', error);
-            throw error;
         }
     }
 
