@@ -110,30 +110,39 @@ async function handlePullRequestEvent(notion, payload) {
 }
 
 async function handlePushEvent(notion, payload) {
-    const { ref } = payload;
+    const { ref, pusher } = payload;
     const branch = ref.replace('refs/heads/', '');
+    const assigneeEmail = pusher?.email || pusher?.name || null;
 
     console.log(`🚀 Push detected to branch: ${branch}`);
+    console.log(`👤 Pusher: ${assigneeEmail || 'Unknown'}`);
 
     if (branch === 'uat') {
-        console.log(`🔄 Deployment merged to UAT - moving stories from "Ready for UAT", "In Dev", "Failed in Dev" to "In UAT"`);
-        const statusesToMove = ['Ready for UAT', 'In Dev', 'Failed in Dev'];
-        const pages = await notion.findPagesByStatus(statusesToMove);
+        console.log(`🔄 Deployment merged to UAT - moving assignee's feature tickets to "In UAT"`);
+        const statusesToMove = ['In Dev', 'Failed in Dev', 'Ready for UAT'];
 
-        if (pages.length > 0) {
-            await notion.updateMultiplePagesStatus(pages, 'In UAT');
+        const pages = await notion.findPagesByStatusAndAssignee(statusesToMove, assigneeEmail);
+        const featurePages = filterFeatureRelatedPages(pages);
+
+        if (featurePages.length > 0) {
+            console.log(`📊 Found ${featurePages.length} feature-related tickets from assignee to move`);
+            await notion.updateMultiplePagesStatus(featurePages, 'In UAT');
         } else {
-            console.log(`ℹ️ No pages found with statuses: ${statusesToMove.join(', ')}`);
+            console.log(`ℹ️ No feature-related tickets found for assignee with statuses: ${statusesToMove.join(', ')}`);
         }
 
     } else if (branch === 'production') {
-        console.log(`🔄 Deployment merged to Production - moving stories from "Passed UAT" to "Live in Prod"`);
-        const pages = await notion.findPagesByStatus(['Passed UAT']);
+        console.log(`🔄 Deployment merged to Production - moving assignee's feature tickets to "Live in Prod"`);
+        const statusesToMove = ['In UAT', 'Passed UAT'];
 
-        if (pages.length > 0) {
-            await notion.updateMultiplePagesStatus(pages, 'Live in Prod');
+        const pages = await notion.findPagesByStatusAndAssignee(statusesToMove, assigneeEmail);
+        const featurePages = filterFeatureRelatedPages(pages);
+
+        if (featurePages.length > 0) {
+            console.log(`📊 Found ${featurePages.length} feature-related tickets from assignee to move`);
+            await notion.updateMultiplePagesStatus(featurePages, 'Live in Prod');
         } else {
-            console.log(`ℹ️ No pages found with status: Passed UAT`);
+            console.log(`ℹ️ No feature-related tickets found for assignee with statuses: ${statusesToMove.join(', ')}`);
         }
 
     } else if (branch === 'dev' || branch === 'development') {
@@ -142,6 +151,27 @@ async function handlePushEvent(notion, payload) {
     } else {
         console.log(`ℹ️ Push to ${branch} - no status changes configured for this branch`);
     }
+}
+
+function filterFeatureRelatedPages(pages) {
+    return pages.filter(page => {
+        // Check if the page has a title that contains "feature/" or if there's a branch property
+        const title = page.properties.Name?.title?.[0]?.plain_text || '';
+        const branchProperty = page.properties.Branch?.rich_text?.[0]?.plain_text || '';
+
+        // Look for feature/ in title, branch property, or any text content
+        const hasFeatureReference =
+            title.toLowerCase().includes('feature/') ||
+            branchProperty.toLowerCase().includes('feature/');
+
+        if (hasFeatureReference) {
+            console.log(`✅ Including feature-related ticket: ${title}`);
+            return true;
+        } else {
+            console.log(`⏭️  Skipping non-feature ticket: ${title}`);
+            return false;
+        }
+    });
 }
 
 function extractTaskIdNumberFromBranch(branchName) {
