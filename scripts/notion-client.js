@@ -109,6 +109,102 @@ class NotionClient {
         }
     }
 
+    async findPagesByStatusAndAssignee(statuses, assigneeEmail) {
+        try {
+            if (!assigneeEmail) {
+                console.log('⚠️ No assignee email provided, falling back to status-only search');
+                return await this.findPagesByStatus(statuses);
+            }
+
+            // Build status conditions
+            const statusConditions = statuses.map(status => ({
+                property: "Status",
+                select: {
+                    equals: status
+                }
+            }));
+
+            // Get database schema to understand assignee property structure
+            const database = await this.notion.databases.retrieve({
+                database_id: this.databaseId
+            });
+
+            let assigneeProperty = null;
+            let assigneePropertyName = null;
+
+            // Look for common assignee property names
+            const possibleAssigneeNames = ['Assignee', 'Assigned To', 'Owner', 'Developer', 'Person'];
+            for (const name of possibleAssigneeNames) {
+                if (database.properties[name]) {
+                    assigneeProperty = database.properties[name];
+                    assigneePropertyName = name;
+                    console.log(`🎯 Using assignee property: ${name} (type: ${assigneeProperty.type})`);
+                    break;
+                }
+            }
+
+            if (!assigneeProperty) {
+                console.log('⚠️ No assignee property found, falling back to status-only search');
+                return await this.findPagesByStatus(statuses);
+            }
+
+            // Build assignee filter based on property type
+            let assigneeFilter = null;
+
+            if (assigneeProperty.type === 'people') {
+                // For people property, we need to search by email
+                assigneeFilter = {
+                    property: assigneePropertyName,
+                    people: {
+                        contains: assigneeEmail
+                    }
+                };
+            } else if (assigneeProperty.type === 'rich_text' || assigneeProperty.type === 'title') {
+                // For text properties, search by email or name
+                assigneeFilter = {
+                    property: assigneePropertyName,
+                    rich_text: {
+                        contains: assigneeEmail
+                    }
+                };
+            } else if (assigneeProperty.type === 'email') {
+                // For email properties
+                assigneeFilter = {
+                    property: assigneePropertyName,
+                    email: {
+                        equals: assigneeEmail
+                    }
+                };
+            } else {
+                console.log(`⚠️ Unsupported assignee property type: ${assigneeProperty.type}, falling back to status-only search`);
+                return await this.findPagesByStatus(statuses);
+            }
+
+            // Combine status and assignee filters
+            const filter = {
+                and: [
+                    {
+                        or: statusConditions
+                    },
+                    assigneeFilter
+                ]
+            };
+
+            const response = await this.notion.databases.query({
+                database_id: this.databaseId,
+                filter: filter
+            });
+
+            console.log(`Found ${response.results.length} pages for assignee ${assigneeEmail} with statuses: ${statuses.join(', ')}`);
+            return response.results;
+
+        } catch (error) {
+            console.error('Error finding pages by status and assignee:', error);
+            console.log('Falling back to status-only search');
+            return await this.findPagesByStatus(statuses);
+        }
+    }
+
     async updateMultiplePagesStatus(pages, status) {
         console.log(`Updating ${pages.length} pages to status: ${status}`);
         for (const page of pages) {
