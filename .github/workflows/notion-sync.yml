@@ -1,10 +1,10 @@
-name: Sync Notion Status with GitHub
+name: Sync Notion Status with GitHub (Dev Workflow)
 
 on:
   pull_request:
     types: [opened, review_requested, closed]
   push:
-    branches: [dev, development, uat, production]
+    branches: [dev, development]
 
 jobs:
   update-notion:

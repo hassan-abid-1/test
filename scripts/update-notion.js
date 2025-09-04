@@ -13,8 +13,6 @@ async function main() {
 
         const notion = new NotionClient(notionApiKey, notionDatabaseId);
 
-        await notion.inspectDatabaseSchema();
-
         const eventPayload = JSON.parse(fs.readFileSync(eventPath, 'utf8'));
         const eventName = process.env.GITHUB_EVENT_NAME;
 
@@ -46,12 +44,7 @@ async function handlePullRequestEvent(notion, payload) {
     console.log(`🔍 PR from branch: ${branchName} → ${targetBranch}`);
     console.log(`🎯 Action: ${action}`);
 
-    const deploymentBranches = ['uat', 'production'];
-    if (deploymentBranches.includes(targetBranch)) {
-        console.log(`⏭️ Skipping status update - deployment PR to ${targetBranch}`);
-        return;
-    }
-
+    // Only handle PRs targeting development branches
     const developmentBranches = ['dev', 'development'];
     if (!developmentBranches.includes(targetBranch)) {
         console.log(`⏭️ Skipping - target branch ${targetBranch} is not a dev branch`);
@@ -84,8 +77,9 @@ async function handlePullRequestEvent(notion, payload) {
         case 'closed':
             if (pull_request.merged) {
                 await notion.updatePageStatus(page.id, 'In Dev');
+                console.log(`✅ Task ${numericTaskId} marked as 'In Dev' after successful merge`);
             } else {
-                console.log(`❌ PR closed without merge - no status change`);
+                console.log(`ℹ️ PR closed without merge - no status change applied`);
             }
             break;
         default:
@@ -94,69 +88,34 @@ async function handlePullRequestEvent(notion, payload) {
 }
 
 async function handlePushEvent(notion, payload) {
-    const { ref, pusher } = payload;
+    const { ref } = payload;
     const branch = ref.replace('refs/heads/', '');
-    const assigneeEmail = pusher?.email || null;
 
     console.log(`🚀 Push detected to branch: ${branch}`);
-    console.log(`👤 Pusher: ${assigneeEmail || 'Unknown'}`);
 
-    if (branch === 'uat') {
-        const statusesToMove = ['In Dev', 'Failed in Dev', 'Ready for UAT'];
-        await moveFeatureTickets(notion, assigneeEmail, statusesToMove, 'In UAT');
-    } else if (branch === 'production') {
-        const statusesToMove = ['In UAT', 'Passed UAT'];
-        await moveFeatureTickets(notion, assigneeEmail, statusesToMove, 'Live in Prod');
-    } else if (branch === 'dev' || branch === 'development') {
-        console.log(`ℹ️ Push to ${branch} - no bulk status changes`);
+    if (branch === 'dev' || branch === 'development') {
+        console.log(`ℹ️ Direct push to ${branch} detected`);
+        console.log(`⏭️ No automatic status changes for direct pushes to ${branch}`);
     } else {
-        console.log(`ℹ️ Push to ${branch} - no status changes configured`);
+        console.log(`ℹ️ Push to ${branch} - no status changes configured for this branch`);
     }
-}
-
-async function moveFeatureTickets(notion, assigneeEmail, statuses, newStatus) {
-    if (!assigneeEmail) {
-        console.log(`⚠️ No assignee email found, skipping ${newStatus}`);
-        return;
-    }
-
-    console.log(`🔄 Looking for ${assigneeEmail}'s tickets in statuses: ${statuses.join(', ')}`);
-
-    const pages = await notion.findPagesByStatusAndAssignee(statuses, assigneeEmail);
-    const featurePages = filterFeatureRelatedPages(pages);
-
-    if (featurePages.length === 0) {
-        console.log(`ℹ️ No feature-related tickets found for ${assigneeEmail}`);
-        return;
-    }
-
-    console.log(`📊 Updating ${featurePages.length} tickets for ${assigneeEmail} → ${newStatus}`);
-    await notion.updateMultiplePagesStatus(featurePages, newStatus);
-}
-
-function filterFeatureRelatedPages(pages) {
-    return pages.filter(page => {
-        const title = page.properties.Title?.title?.[0]?.plain_text || '';
-        const branchName = page.properties['Branch Name']?.rich_text?.[0]?.plain_text || '';
-
-        const hasFeatureReference =
-            title.toLowerCase().includes('feature/') ||
-            branchName.toLowerCase().includes('feature/');
-
-        if (hasFeatureReference) {
-            console.log(`✅ Including feature ticket: ${title}`);
-            return true;
-        } else {
-            console.log(`⏭️ Skipping non-feature ticket: ${title}`);
-            return false;
-        }
-    });
 }
 
 function extractTaskIdNumberFromBranch(branchName) {
-    const matches = branchName.match(/(\d+)/g);
-    return matches ? parseInt(matches[matches.length - 1]) : null;
+    // ONLY allow these approved prefixes
+    const approvedPrefixes = ['feature', 'bugfix', 'hotfix', 'chore', 'fix', 'feat'];
+    const prefixPattern = `(?:${approvedPrefixes.join('|')})`;
+
+    // Pattern: approved-prefix/GEN-1234-description
+    const pattern = new RegExp(`^${prefixPattern}\\/(?:[A-Z]+-)?(\\d+)`, 'i');
+
+    const match = branchName.match(pattern);
+    if (match && match[1]) {
+        return parseInt(match[1]);
+    }
+
+    console.log(`❌ Branch "${branchName}" does not match approved prefix pattern`);
+    return null;
 }
 
 main();
-
