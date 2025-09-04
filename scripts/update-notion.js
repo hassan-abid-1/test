@@ -44,10 +44,10 @@ async function handlePullRequestEvent(notion, payload) {
     console.log(`🔍 PR from branch: ${branchName} → ${targetBranch}`);
     console.log(`🎯 Action: ${action}`);
 
-    // Only handle PRs targeting development branches
-    const developmentBranches = ['dev', 'development'];
-    if (!developmentBranches.includes(targetBranch)) {
-        console.log(`⏭️ Skipping - target branch ${targetBranch} is not a dev branch`);
+    // Track dev, development, and main (case-insensitive)
+    const trackedBranches = ['dev', 'development', 'main'];
+    if (!trackedBranches.includes(targetBranch.toLowerCase())) {
+        console.log(`⏭️ Skipping - target branch ${targetBranch} is not tracked`);
         return;
     }
 
@@ -93,7 +93,8 @@ async function handlePushEvent(notion, payload) {
 
     console.log(`🚀 Push detected to branch: ${branch}`);
 
-    if (branch === 'dev' || branch === 'development') {
+    const trackedBranches = ['dev', 'development', 'main'];
+    if (trackedBranches.includes(branch.toLowerCase())) {
         console.log(`ℹ️ Direct push to ${branch} detected`);
         console.log(`⏭️ No automatic status changes for direct pushes to ${branch}`);
     } else {
@@ -102,11 +103,11 @@ async function handlePushEvent(notion, payload) {
 }
 
 function extractTaskIdNumberFromBranch(branchName) {
-    // ONLY allow these approved prefixes
+    // Allow approved prefixes (case-insensitive)
     const approvedPrefixes = ['feature', 'bugfix', 'hotfix', 'chore', 'fix', 'feat'];
     const prefixPattern = `(?:${approvedPrefixes.join('|')})`;
 
-    // Pattern: approved-prefix/GEN-1234-description
+    // Pattern: prefix/PROJECTKEY-1234-description
     const pattern = new RegExp(`^${prefixPattern}\\/(?:[A-Z]+-)?(\\d+)`, 'i');
 
     const match = branchName.match(pattern);
