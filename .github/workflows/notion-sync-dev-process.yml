@@ -4,7 +4,7 @@ on:
   pull_request:
     types: [opened, review_requested, closed]
   push:
-    branches: [dev, development, uat, production]
+    branches: [dev, development, main]
 
 jobs:
   update-notion:
@@ -18,8 +18,10 @@ jobs:
         with:
           node-version: '18'
 
-      - name: Install dependencies
-        run: npm install
+      - name: Install Notion sync dependencies
+        run: |
+          cd scripts/notion-sync
+          npm install
 
       - name: Run Notion sync
         env:
@@ -27,7 +29,9 @@ jobs:
           NOTION_DATABASE_ID: ${{ secrets.NOTION_DATABASE_ID }}
           GITHUB_EVENT_PATH: ${{ github.event_path }}
           GITHUB_EVENT_NAME: ${{ github.event_name }}
-        run: node scripts/update-notion.js
+        run: |
+          cd scripts/notion-sync
+          node update-notion.js
 
       - name: Notify on failure
         if: failure()
