@@ -20,52 +20,46 @@ async function main() {
             return;
         }
 
-        const assignees = pull_request.assignees.map(a => a.login);
-        if (assignees.length === 0) {
-            console.log('⚠️ No assignees on PR, cannot link tickets');
-            return;
-        }
+        // ✅ Extract PR assignees (GitHub login or display name)
+        const prAssignees = (pull_request.assignees || [])
+            .map(a => a.login || a.name || '')
+            .map(n => n.toLowerCase());
+        console.log(`👥 PR assignees: ${prAssignees.join(', ')}`);
 
-        console.log(`👥 PR assignees: ${assignees.join(', ')}`);
+        // ✅ Allowed Notion names
+        const allowedNames = ['Mel', 'Lisa', 'Zaid', 'Hassan'];
 
+        // Candidate statuses to transition from
         const candidateStatuses = ['In Dev', 'Failed in Dev', 'Ready for UAT'];
-        let allTickets = [];
 
-        for (const assignee of assignees) {
-            const assigneeEmail = await mapGithubLoginToEmail(assignee);
-            if (!assigneeEmail) {
-                console.log(`⚠️ No email mapping found for GitHub user: ${assignee}`);
-                continue;
-            }
-            const tickets = await notion.findPagesByStatusAndAssignee(candidateStatuses, assigneeEmail);
-            allTickets.push(...tickets);
-        }
+        // Get all tickets with candidate statuses
+        const allTickets = await notion.findPagesByStatus(candidateStatuses);
 
-        const uniqueTickets = [...new Map(allTickets.map(t => [t.id, t])).values()];
+        // ✅ Filter tickets where Notion assignee name matches PR assignee
+        const matchingTickets = allTickets.filter(ticket => {
+            const assignees = ticket.properties?.Assignee?.people || [];
+            const notionNames = assignees.map(p => (p.name || '').toLowerCase());
 
-        console.log(`📌 Found ${uniqueTickets.length} candidate tickets for PR`);
+            return notionNames.some(notionName => {
+                if (!allowedNames.map(n => n.toLowerCase()).includes(notionName)) return false;
+                return prAssignees.some(pa => pa.includes(notionName) || notionName.includes(pa));
+            });
+        });
+
+        console.log(`📌 Found ${matchingTickets.length} candidate tickets linked to PR`);
 
         if (action === 'opened') {
-            console.log(`🔗 Tickets linked to PR: ${uniqueTickets.map(t => t.id).join(', ')}`);
+            console.log(`🔗 Tickets linked: ${matchingTickets.map(t => t.id).join(', ')}`);
         }
 
         if (action === 'closed' && pull_request.merged) {
             console.log(`✅ PR merged → transitioning tickets to In UAT`);
-            await notion.updateMultiplePagesStatus(uniqueTickets, 'In UAT');
+            await notion.updateMultiplePagesStatus(matchingTickets, 'In UAT');
         }
     } catch (err) {
         console.error('❌ Error in Notion UAT sync:', err);
         process.exit(1);
     }
-}
-
-// ⚠️ Replace with your real GitHub login → email mapping
-async function mapGithubLoginToEmail(login) {
-    const mapping = {
-        'alice-dev': 'alice@company.com',
-        'bob-dev': 'bob@company.com'
-    };
-    return mapping[login] || null;
 }
 
 main();
