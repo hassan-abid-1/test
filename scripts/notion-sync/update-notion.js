@@ -44,7 +44,6 @@ async function handlePullRequestEvent(notion, payload) {
     console.log(`🔍 PR from branch: ${branchName} → ${targetBranch}`);
     console.log(`🎯 Action: ${action}`);
 
-    // Track dev, development, and main (case-insensitive)
     const trackedBranches = ['dev', 'development', 'main'];
     if (!trackedBranches.includes(targetBranch.toLowerCase())) {
         console.log(`⏭️ Skipping - target branch ${targetBranch} is not tracked`);
@@ -69,7 +68,7 @@ async function handlePullRequestEvent(notion, payload) {
 
     switch (action) {
         case 'opened':
-            await notion.updatePageStatus(page.id, 'In Progress');
+            await notion.updatePageStatus(page.id, 'In progress');
             break;
         case 'review_requested':
             await notion.updatePageStatus(page.id, 'In Code Review');
@@ -103,18 +102,13 @@ async function handlePushEvent(notion, payload) {
 }
 
 function extractTaskIdNumberFromBranch(branchName) {
-    // Allow approved prefixes (case-insensitive)
     const approvedPrefixes = ['feature', 'bugfix', 'hotfix', 'chore', 'fix', 'feat'];
     const prefixPattern = `(?:${approvedPrefixes.join('|')})`;
-
-    // Pattern: prefix/PROJECTKEY-1234-description
     const pattern = new RegExp(`^${prefixPattern}\\/(?:[A-Z]+-)?(\\d+)`, 'i');
-
     const match = branchName.match(pattern);
     if (match && match[1]) {
         return parseInt(match[1]);
     }
-
     console.log(`❌ Branch "${branchName}" does not match approved prefix pattern`);
     return null;
 }

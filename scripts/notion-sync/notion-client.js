@@ -53,7 +53,7 @@ class NotionClient {
             await this.notion.pages.update({
                 page_id: pageId,
                 properties: {
-                    "Status": { select: { name: status } }
+                    "Status": { status: { name: status } }
                 }
             });
             console.log(`✅ Updated page ${pageId} → ${status}`);
@@ -67,7 +67,7 @@ class NotionClient {
         try {
             const orConditions = statuses.map(status => ({
                 property: "Status",
-                select: { equals: status }
+                status: { equals: status }
             }));
 
             const response = await this.notion.databases.query({
@@ -108,7 +108,7 @@ class NotionClient {
                     {
                         or: statuses.map(status => ({
                             property: "Status",
-                            select: { equals: status }
+                            status: { equals: status }
                         }))
                     },
                     {
