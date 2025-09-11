@@ -31,3 +31,9 @@ jobs:
         run: |
           cd scripts/notion-sync
           node update-notion-uat.js
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "❌ Notion UAT sync failed. Check logs."
+          exit 1
