@@ -20,29 +20,42 @@ async function main() {
             return;
         }
 
-        // ✅ Extract PR assignees (GitHub login or display name)
-        const prAssignees = (pull_request.assignees || [])
-            .map(a => a.login || a.name || '')
-            .map(n => n.toLowerCase());
+        // ✅ Extract PR assignees (GitHub logins)
+        const prAssignees = (pull_request.assignees || []).map(a => a.login || '').map(n => n.toLowerCase());
         console.log(`👥 PR assignees: ${prAssignees.join(', ')}`);
 
-        // ✅ Allowed Notion names
-        const allowedNames = ['Mel', 'Lisa', 'Zaid', 'Hassan'];
+        // ✅ Hardcoded GitHub → Notion name mapping
+        const loginToNotionName = {
+            'hassan-abid-1': 'Hassan Abid',
+            'melcantwell27': 'melanie cantwell',
+            'beachsideproperty': 'Lisa',
+            'zaid-shabbir-ui': 'Zaid Shabbir'
+        };
 
-        // Candidate statuses to transition from
+        // Log mapping
+        prAssignees.forEach(login => {
+            const mappedName = loginToNotionName[login];
+            if (mappedName) {
+                console.log(`🔗 GitHub assignee "${login}" → Notion assignee "${mappedName}"`);
+            } else {
+                console.log(`⚠️ No mapping found for GitHub assignee "${login}"`);
+            }
+        });
+
+        // Candidate statuses
         const candidateStatuses = ['In Dev', 'Failed in Dev', 'Ready for UAT'];
 
-        // Get all tickets with candidate statuses
+        // Fetch candidate tickets
         const allTickets = await notion.findPagesByStatus(candidateStatuses);
 
-        // ✅ Filter tickets where Notion assignee name matches PR assignee
+        // ✅ Filter tickets where Notion assignee matches mapped name
         const matchingTickets = allTickets.filter(ticket => {
-            const assignees = ticket.properties?.Assignee?.people || [];
-            const notionNames = assignees.map(p => (p.name || '').toLowerCase());
+            const notionAssignees = (ticket.properties?.Assignee?.people || []).map(p => (p.name || '').toLowerCase());
 
-            return notionNames.some(notionName => {
-                if (!allowedNames.map(n => n.toLowerCase()).includes(notionName)) return false;
-                return prAssignees.some(pa => pa.includes(notionName) || notionName.includes(pa));
+            return prAssignees.some(prLogin => {
+                const mappedName = loginToNotionName[prLogin];
+                if (!mappedName) return false; // skip unmapped users
+                return notionAssignees.includes(mappedName.toLowerCase());
             });
         });
 
