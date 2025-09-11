@@ -69,7 +69,7 @@ async function handlePullRequestEvent(notion, payload) {
 
     switch (action) {
         case 'opened':
-            await notion.updatePageStatus(page.id, 'In Progress');
+            await notion.updatePageStatus(page.id, 'In progress');
             break;
         case 'review_requested':
             await notion.updatePageStatus(page.id, 'In Code Review');

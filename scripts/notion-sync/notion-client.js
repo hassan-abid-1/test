@@ -1,122 +1,161 @@
-const { NotionClient } = require('./notion-client');
-const fs = require('fs');
+const { Client } = require('@notionhq/client');
 
-async function main() {
-    try {
-        const notionApiKey = process.env.NOTION_API_KEY;
-        const notionDatabaseId = process.env.NOTION_DATABASE_ID;
-        const eventPath = process.env.GITHUB_EVENT_PATH;
-
-        if (!notionApiKey || !notionDatabaseId) {
-            throw new Error('Missing Notion API credentials');
-        }
-
-        const notion = new NotionClient(notionApiKey, notionDatabaseId);
-
-        const eventPayload = JSON.parse(fs.readFileSync(eventPath, 'utf8'));
-        const eventName = process.env.GITHUB_EVENT_NAME;
-
-        console.log(`📋 Processing GitHub event: ${eventName}`);
-
-        switch (eventName) {
-            case 'pull_request':
-                await handlePullRequestEvent(notion, eventPayload);
-                break;
-            case 'push':
-                await handlePushEvent(notion, eventPayload);
-                break;
-            default:
-                console.log(`⚠️ Unhandled event type: ${eventName}`);
-        }
-
-        console.log('✅ Notion sync completed successfully');
-    } catch (error) {
-        console.error('❌ Error in Notion sync:', error);
-        process.exit(1);
-    }
-}
-
-async function handlePullRequestEvent(notion, payload) {
-    const { action, pull_request } = payload;
-    const branchName = pull_request.head.ref;
-    const targetBranch = pull_request.base.ref;
-
-    console.log(`🔍 PR from branch: ${branchName} → ${targetBranch}`);
-    console.log(`🎯 Action: ${action}`);
-
-    // Track dev, development, and main (case-insensitive)
-    const trackedBranches = ['dev', 'development', 'main'];
-    if (!trackedBranches.includes(targetBranch.toLowerCase())) {
-        console.log(`⏭️ Skipping - target branch ${targetBranch} is not tracked`);
-        return;
+class NotionClient {
+    constructor(apiKey, databaseId) {
+        this.notion = new Client({ auth: apiKey });
+        this.databaseId = databaseId;
     }
 
-    const numericTaskId = extractTaskIdNumberFromBranch(branchName);
-    console.log(`🔢 Numeric Task ID from branch: ${numericTaskId}`);
+    async findPageByTaskId(taskId) {
+        try {
+            console.log(`Searching for Notion page with Task ID: ${taskId}`);
+            const database = await this.notion.databases.retrieve({
+                database_id: this.databaseId
+            });
 
-    if (!numericTaskId) {
-        console.log(`❌ No Task ID found in branch: ${branchName}`);
-        return;
-    }
-
-    const page = await notion.findPageByTaskId(numericTaskId);
-    if (!page) {
-        console.log(`❌ No Notion page found with Task ID: ${numericTaskId}`);
-        return;
-    }
-
-    console.log(`✅ Found Notion page: ${page.id}`);
-
-    switch (action) {
-        case 'opened':
-            await notion.updatePageStatus(page.id, 'In progress');
-            break;
-        case 'review_requested':
-            await notion.updatePageStatus(page.id, 'In Code Review');
-            break;
-        case 'closed':
-            if (pull_request.merged) {
-                await notion.updatePageStatus(page.id, 'In Dev');
-                console.log(`✅ Task ${numericTaskId} marked as 'In Dev' after successful merge`);
-            } else {
-                console.log(`ℹ️ PR closed without merge - no status change applied`);
+            if (!database.properties['Task ID']) {
+                console.error('No Task ID property found in database');
+                return null;
             }
-            break;
-        default:
-            console.log(`⚠️ Unhandled PR action: ${action}`);
+
+            const taskIdProperty = database.properties['Task ID'];
+            if (taskIdProperty.type !== 'unique_id') {
+                console.error(`Expected Task ID to be unique_id type, got: ${taskIdProperty.type}`);
+                return null;
+            }
+
+            const numericId = typeof taskId === 'string' ? parseInt(taskId) : taskId;
+            if (isNaN(numericId)) {
+                console.log(`⚠️ Cannot search Task ID with non-numeric value: ${taskId}`);
+                return null;
+            }
+
+            const filter = {
+                property: 'Task ID',
+                unique_id: { equals: numericId }
+            };
+
+            const response = await this.notion.databases.query({
+                database_id: this.databaseId,
+                filter
+            });
+
+            console.log(`Found ${response.results.length} pages for Task ID: ${taskId}`);
+            return response.results[0] || null;
+        } catch (error) {
+            console.error('Error finding page by Task ID:', error);
+            return null;
+        }
+    }
+
+    async updatePageStatus(pageId, status) {
+        try {
+            await this.notion.pages.update({
+                page_id: pageId,
+                properties: {
+                    "Status": { status: { name: status } }
+                }
+            });
+            console.log(`✅ Updated page ${pageId} → ${status}`);
+        } catch (error) {
+            console.error('❌ Error updating page status:', error);
+            throw error;
+        }
+    }
+
+    async findPagesByStatus(statuses) {
+        try {
+            const orConditions = statuses.map(status => ({
+                property: "Status",
+                status: { equals: status }
+            }));
+
+            const response = await this.notion.databases.query({
+                database_id: this.databaseId,
+                filter: { or: orConditions }
+            });
+
+            console.log(`Found ${response.results.length} pages with statuses: ${statuses.join(', ')}`);
+            return response.results;
+        } catch (error) {
+            console.error('Error finding pages by status:', error);
+            return [];
+        }
+    }
+
+    async findPagesByStatusAndAssignee(statuses, assigneeEmail) {
+        try {
+            if (!assigneeEmail) {
+                console.log('⚠️ No assignee email provided, falling back to status-only search');
+                return await this.findPagesByStatus(statuses);
+            }
+
+            // Get Notion userId from email
+            const users = await this.notion.users.list();
+            const matchedUser = users.results.find(
+                u => u.type === 'person' && u.person?.email?.toLowerCase() === assigneeEmail.toLowerCase()
+            );
+
+            if (!matchedUser) {
+                console.log(`⚠️ Could not find Notion user for email: ${assigneeEmail}, falling back to status-only search`);
+                return await this.findPagesByStatus(statuses);
+            }
+
+            const userId = matchedUser.id;
+
+            const filter = {
+                and: [
+                    {
+                        or: statuses.map(status => ({
+                            property: "Status",
+                            status: { equals: status }
+                        }))
+                    },
+                    {
+                        property: "Assignee",
+                        people: { contains: userId }
+                    }
+                ]
+            };
+
+            const response = await this.notion.databases.query({
+                database_id: this.databaseId,
+                filter
+            });
+
+            console.log(`Found ${response.results.length} pages for ${assigneeEmail} with statuses: ${statuses.join(', ')}`);
+            return response.results;
+        } catch (error) {
+            console.error('Error finding pages by status and assignee:', error);
+            return await this.findPagesByStatus(statuses);
+        }
+    }
+
+    async updateMultiplePagesStatus(pages, status) {
+        console.log(`Updating ${pages.length} pages → ${status}`);
+        for (const page of pages) {
+            await this.updatePageStatus(page.id, status);
+        }
+    }
+
+    async inspectDatabaseSchema() {
+        try {
+            const database = await this.notion.databases.retrieve({
+                database_id: this.databaseId
+            });
+
+            console.log('\n=== Database Schema ===');
+            for (const [name, property] of Object.entries(database.properties)) {
+                console.log(`Property: ${name} | Type: ${property.type}`);
+            }
+            console.log('========================\n');
+
+            return database.properties;
+        } catch (error) {
+            console.error('Error inspecting database schema:', error);
+            return null;
+        }
     }
 }
 
-async function handlePushEvent(notion, payload) {
-    const { ref } = payload;
-    const branch = ref.replace('refs/heads/', '');
-
-    console.log(`🚀 Push detected to branch: ${branch}`);
-
-    const trackedBranches = ['dev', 'development', 'main'];
-    if (trackedBranches.includes(branch.toLowerCase())) {
-        console.log(`ℹ️ Direct push to ${branch} detected`);
-        console.log(`⏭️ No automatic status changes for direct pushes to ${branch}`);
-    } else {
-        console.log(`ℹ️ Push to ${branch} - no status changes configured for this branch`);
-    }
-}
-
-function extractTaskIdNumberFromBranch(branchName) {
-    // Allow approved prefixes (case-insensitive)
-    const approvedPrefixes = ['feature', 'bugfix', 'hotfix', 'chore', 'fix', 'feat'];
-    const prefixPattern = `(?:${approvedPrefixes.join('|')})`;
-
-    // Pattern: prefix/PROJECTKEY-1234-description
-    const pattern = new RegExp(`^${prefixPattern}\\/(?:[A-Z]+-)?(\\d+)`, 'i');
-
-    const match = branchName.match(pattern);
-    if (match && match[1]) {
-        return parseInt(match[1]);
-    }
-
-    console.log(`❌ Branch "${branchName}" does not match approved prefix pattern`);
-    return null;
-}
-
-main();
+module.exports = { NotionClient };
