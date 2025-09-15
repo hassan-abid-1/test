@@ -26,7 +26,7 @@ async function main() {
 
         // ✅ Hardcoded GitHub → Notion name mapping
         const loginToNotionName = {
-            'hassan-abid-1': 'Hassan Abid',
+            'zahratariq-96': 'Zahra Tariq',
             'melcantwell27': 'melanie cantwell',
             'beachsideproperty': 'Lisa',
             'zaid-shabbir-ui': 'Zaid Shabbir'
