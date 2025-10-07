@@ -15,16 +15,16 @@ async function main() {
         const { action, pull_request } = eventPayload;
         const targetBranch = pull_request.base.ref;
 
-        if (targetBranch.toLowerCase() !== 'uat') {
-            console.log(`⏭️ Skipping PR not targeting uat (target=${targetBranch})`);
+        if (targetBranch.toLowerCase() !== 'prod') {
+            console.log(`⏭️ Skipping PR not targeting prod (target=${targetBranch})`);
             return;
         }
 
-        // ✅ Extract PR assignees (GitHub logins)
+        // ✅ Extract PR assignees
         const prAssignees = (pull_request.assignees || []).map(a => a.login || '').map(n => n.toLowerCase());
         console.log(`👥 PR assignees: ${prAssignees.join(', ')}`);
 
-        // ✅ Hardcoded GitHub → Notion name mapping
+        // ✅ GitHub → Notion mapping
         const loginToNotionName = {
             'hassan-abid-1': 'Hassan Abid',
             'zahratariq-96': 'Zahra Tariq',
@@ -33,7 +33,6 @@ async function main() {
             'zaid-shabbir-ui': 'Zaid Shabbir'
         };
 
-        // Log mapping
         prAssignees.forEach(login => {
             const mappedName = loginToNotionName[login];
             if (mappedName) {
@@ -43,8 +42,8 @@ async function main() {
             }
         });
 
-        // Candidate statuses
-        const candidateStatuses = ['In Dev', 'Failed in Dev', 'Ready for UAT'];
+        // Candidate statuses for PROD transition
+        const candidateStatuses = ['In UAT', 'Failed in UAT', 'Passed UAT'];
 
         // Fetch candidate tickets
         const allTickets = await notion.findPagesByStatus(candidateStatuses);
@@ -55,7 +54,7 @@ async function main() {
 
             return prAssignees.some(prLogin => {
                 const mappedName = loginToNotionName[prLogin];
-                if (!mappedName) return false; // skip unmapped users
+                if (!mappedName) return false;
                 return notionAssignees.includes(mappedName.toLowerCase());
             });
         });
@@ -67,11 +66,11 @@ async function main() {
         }
 
         if (action === 'closed' && pull_request.merged) {
-            console.log(`✅ PR merged → transitioning tickets to In UAT`);
-            await notion.updateMultiplePagesStatus(matchingTickets, 'In UAT');
+            console.log(`🚀 PR merged → transitioning tickets to Live in Prod`);
+            await notion.updateMultiplePagesStatus(matchingTickets, 'Live in Prod');
         }
     } catch (err) {
-        console.error('❌ Error in Notion UAT sync:', err);
+        console.error('❌ Error in Notion Prod sync:', err);
         process.exit(1);
     }
 }
