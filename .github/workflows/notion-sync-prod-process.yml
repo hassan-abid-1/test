@@ -1,0 +1,39 @@
+name: Sync Notion Status with GitHub (Production)
+
+on:
+  pull_request:
+    types: [opened, closed]
+    branches: [Production]
+
+jobs:
+  update-notion-prod:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install Notion sync dependencies
+        run: |
+          cd scripts/notion-sync
+          npm install
+
+      - name: Run Notion Prod sync
+        env:
+          NOTION_API_KEY: ${{ secrets.NOTION_API_KEY }}
+          NOTION_DATABASE_ID: ${{ secrets.NOTION_DATABASE_ID }}
+          GITHUB_EVENT_PATH: ${{ github.event_path }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+        run: |
+          cd scripts/notion-sync
+          node update-notion-prod.js
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "❌ Notion Production sync failed. Check logs."
+          exit 1
