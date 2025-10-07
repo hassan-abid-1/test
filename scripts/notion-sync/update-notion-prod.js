@@ -13,26 +13,28 @@ async function main() {
         }
 
         const { action, pull_request } = eventPayload;
-        const targetBranch = pull_request.base.ref;
+        const targetBranch = pull_request.base.ref.toLowerCase();
 
-        if (targetBranch.toLowerCase() !== 'prod') {
-            console.log(`⏭️ Skipping PR not targeting prod (target=${targetBranch})`);
+        // ✅ Allow both "prod" and "production" as target branches
+        if (!['prod', 'production'].includes(targetBranch)) {
+            console.log(`⏭️ Skipping PR not targeting prod/production (target=${targetBranch})`);
             return;
         }
 
-        // ✅ Extract PR assignees
+        // ✅ Extract PR assignees (GitHub logins)
         const prAssignees = (pull_request.assignees || []).map(a => a.login || '').map(n => n.toLowerCase());
-        console.log(`👥 PR assignees: ${prAssignees.join(', ')}`);
+        console.log(`👥 PR assignees: ${prAssignees.join(', ') || 'None'}`);
 
-        // ✅ GitHub → Notion mapping
+        // ✅ GitHub → Notion name mapping
         const loginToNotionName = {
-            'hassan-abid-1': 'Hassan Abid',
             'zahratariq-96': 'Zahra Tariq',
             'melcantwell27': 'melanie cantwell',
             'beachsideproperty': 'Lisa',
-            'zaid-shabbir-ui': 'Zaid Shabbir'
+            'zaid-shabbir-ui': 'Zaid Shabbir',
+            'hassan-abid-1': 'Hassan Abid' // 👈 Added mapping for Production
         };
 
+        // Log mapping
         prAssignees.forEach(login => {
             const mappedName = loginToNotionName[login];
             if (mappedName) {
@@ -42,15 +44,16 @@ async function main() {
             }
         });
 
-        // Candidate statuses for PROD transition
+        // ✅ Candidate statuses for Production
         const candidateStatuses = ['In UAT', 'Failed in UAT', 'Passed UAT'];
 
-        // Fetch candidate tickets
+        // Fetch candidate tickets from Notion
         const allTickets = await notion.findPagesByStatus(candidateStatuses);
 
-        // ✅ Filter tickets where Notion assignee matches mapped name
+        // ✅ Filter tickets by matching Notion assignee
         const matchingTickets = allTickets.filter(ticket => {
-            const notionAssignees = (ticket.properties?.Assignee?.people || []).map(p => (p.name || '').toLowerCase());
+            const notionAssignees = (ticket.properties?.Assignee?.people || [])
+                .map(p => (p.name || '').toLowerCase());
 
             return prAssignees.some(prLogin => {
                 const mappedName = loginToNotionName[prLogin];
@@ -62,9 +65,10 @@ async function main() {
         console.log(`📌 Found ${matchingTickets.length} candidate tickets linked to PR`);
 
         if (action === 'opened') {
-            console.log(`🔗 Tickets linked: ${matchingTickets.map(t => t.id).join(', ')}`);
+            console.log(`🔗 Tickets linked: ${matchingTickets.map(t => t.id).join(', ') || 'None'}`);
         }
 
+        // ✅ When PR is merged, move tickets to Live in Prod
         if (action === 'closed' && pull_request.merged) {
             console.log(`🚀 PR merged → transitioning tickets to Live in Prod`);
             await notion.updateMultiplePagesStatus(matchingTickets, 'Live in Prod');
